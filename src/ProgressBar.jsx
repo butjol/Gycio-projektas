@@ -1,7 +1,16 @@
 import "./ProgressBar.css";
 
-function ProgressBar({ progress = 0 }) {
-  const displayedProgress = Math.round(progress);
+function ProgressBar({ progress = 0, tasks = [] }) {
+const displayedProgress = Math.round(progress);
+  const completedTaskCount = tasks.filter(
+    (task) => task.status === "Atlikta",
+  ).length;
+  const inProgressTaskCount = tasks.filter(
+    (task) => task.status === "Vykdoma",
+  ).length;
+  const notStartedTaskCount = tasks.filter(
+    (task) => task.status === "Nepradėta",
+  ).length;
 
   return (
     <section className="progress-card">
@@ -27,6 +36,9 @@ function ProgressBar({ progress = 0 }) {
         readOnly
         aria-label="Užduočių progresas"
       />
+      <p className="progress-card__summary">
+        {completedTaskCount} atlikta&nbsp; {inProgressTaskCount} vykdoma&nbsp; {notStartedTaskCount} nepradėta
+      </p>
     </section>
   );
 }

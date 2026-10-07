@@ -70,9 +70,17 @@ function App() {
   const completedTaskCount = tasks.filter(
     (task) => task.status === "Atlikta",
   ).length;
+  const taskProgressByStatus = {
+    Nepradėta: 0,
+    Vykdoma: 50,
+    Atlikta: 100,
+  };
   const progress = tasks.length === 0
     ? 0
-    : (completedTaskCount / tasks.length) * 100;
+    : tasks.reduce(
+        (total, task) => total + (taskProgressByStatus[task.status] ?? 0),
+        0,
+      ) / tasks.length;
   const overdueTaskCount = tasks.filter((task) => {
     if (task.status === "Atlikta" || !task.deadline) return false;
 
@@ -164,7 +172,7 @@ function App() {
 
                 <AddTaskForm onAddTask={handleAddTask} />
 
-                <ProgressBar progress={progress} />
+                <ProgressBar progress={progress} tasks={tasks} />
               </>
             )}
           </main>
