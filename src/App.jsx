@@ -70,6 +70,9 @@ function App() {
   const completedTaskCount = tasks.filter(
     (task) => task.status === "Atlikta",
   ).length;
+  const progress = tasks.length === 0
+    ? 0
+    : (completedTaskCount / tasks.length) * 100;
   const overdueTaskCount = tasks.filter((task) => {
     if (task.status === "Atlikta" || !task.deadline) return false;
 
@@ -161,7 +164,7 @@ function App() {
 
                 <AddTaskForm onAddTask={handleAddTask} />
 
-                <ProgressBar initialProgress={50} />
+                <ProgressBar progress={progress} />
               </>
             )}
           </main>

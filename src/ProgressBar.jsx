@@ -1,12 +1,7 @@
-import { useState } from "react";
 import "./ProgressBar.css";
 
-function ProgressBar({ initialProgress = 50 }) {
-  const [progress, setProgress] = useState(initialProgress);
-
-  function handleChange(event) {
-    setProgress(Number(event.target.value));
-  }
+function ProgressBar({ progress = 0 }) {
+  const displayedProgress = Math.round(progress);
 
   return (
     <section className="progress-card">
@@ -16,7 +11,7 @@ function ProgressBar({ initialProgress = 50 }) {
           <p>Užduočių atlikimo progresas</p>
         </div>
 
-        <span className="progress-card__percentage">{progress}%</span>
+        <span className="progress-card__percentage">{displayedProgress}%</span>
       </div>
 
       <input
@@ -26,10 +21,10 @@ function ProgressBar({ initialProgress = 50 }) {
         max="100"
         step="1"
         value={progress}
-        onChange={handleChange}
         style={{
           "--progress": `${progress}%`,
         }}
+        readOnly
         aria-label="Užduočių progresas"
       />
     </section>
