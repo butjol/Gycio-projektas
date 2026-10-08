@@ -1,53 +1,56 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import TaskList from "./TaskList";
 import ProgressBar from "./ProgressBar";
 import Navbar from "./Navbar";
 import AddTaskForm from "./AddTaskForm";
 import Profile from "./Profile";
-import { createTask, getTasks, updateTask } from "./taskApi";
+import { authenticateUser, createTask, getTasks, updateTask } from "./taskApi";
 import "./App.css";
 
 function App() {
-  const user = {
-    name: "Jonas Jonaitis",
-    email: "jonas@flowly.lt",
-  };
-
   const [activePage, setActivePage] = useState("home");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [user, setUser] = useState(null);
   const [loginError, setLoginError] = useState("");
   const [tasks, setTasks] = useState([]);
-  const [tasksLoading, setTasksLoading] = useState(true);
+  const [tasksLoading, setTasksLoading] = useState(false);
   const [taskError, setTaskError] = useState("");
 
-  useEffect(() => {
-    getTasks()
-      .then(setTasks)
-      .catch(() => setTaskError("Nepavyko įkelti užduočių. Patikrinkite, ar API serveris veikia."))
-      .finally(() => setTasksLoading(false));
-  }, []);
-
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
+    setLoginError("");
+    setTasksLoading(true);
 
-    if (email === "admin" && password === "admin") {
-      setIsLoggedIn(true);
-      setLoginError("");
-      return;
+    try {
+      const authenticatedUser = await authenticateUser(email.trim(), password);
+      if (!authenticatedUser) {
+        setLoginError("Neteisingas vartotojo vardas arba slaptažodis.");
+        return;
+      }
+
+      const userTasks = await getTasks(authenticatedUser.name);
+      setUser(authenticatedUser);
+      setTasks(userTasks);
+      setTaskError("");
+    } catch (error) {
+      setLoginError(error.message || "Nepavyko prisijungti. Patikrinkite duomenų bazės ryšį.");
+    } finally {
+      setTasksLoading(false);
     }
-
-    setLoginError("Neteisingas vartotojo vardas arba slaptažodis.");
   }
 
   async function handleAddTask(newTask) {
     try {
-      const savedTask = await createTask(newTask);
+      const savedTask = await createTask({
+        ...newTask,
+        userName: user.name,
+      });
       setTasks((currentTasks) => [...currentTasks, savedTask]);
       setTaskError("");
     } catch {
-      setTaskError("Užduoties išsaugoti nepavyko. Bandykite dar kartą.");
+      setTaskError("Užduoties išsaugoti nepavyko. Patikrinkite TaskList laukus.");
     }
   }
 
@@ -68,14 +71,8 @@ function App() {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const completedTaskCount = tasks.filter(
-    (task) => task.status === "Atlikta",
-  ).length;
-  const taskProgressByStatus = {
-    Nepradėta: 0,
-    Vykdoma: 50,
-    Atlikta: 100,
-  };
+  const completedTaskCount = tasks.filter((task) => task.status === "Atlikta").length;
+  const taskProgressByStatus = { Nepradėta: 0, Vykdoma: 50, Atlikta: 100 };
   const progress = tasks.length === 0
     ? 0
     : tasks.reduce(
@@ -84,9 +81,7 @@ function App() {
       ) / tasks.length;
   const overdueTaskCount = tasks.filter((task) => {
     if (task.status === "Atlikta" || !task.deadline) return false;
-
-    const deadline = new Date(`${task.deadline}T00:00:00`);
-    return deadline < today;
+    return new Date(`${task.deadline}T00:00:00`) < today;
   }).length;
 
   return (
@@ -95,15 +90,15 @@ function App() {
 
       {activePage === "home" && (
         <>
-          {isLoggedIn && (
+          {user && (
             <header className="welcome-message">
-              <h1>Sveiki sugrįžę!</h1>
-              <p>Prisijungėte kaip admin.</p>
+              <h1>Sveiki sugrįžę, {user.name}!</h1>
+              <p>Jūsų asmeninis užduočių sąrašas.</p>
             </header>
           )}
 
           <main className="login-page">
-            {!isLoggedIn && (
+            {!user && (
               <div className="login-card">
                 <header className="login-card__header">
                   <h1>Prisijungti</h1>
@@ -117,7 +112,6 @@ function App() {
                       type="text"
                       name="username"
                       autoComplete="username"
-                      placeholder="admin"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
                       required
@@ -126,31 +120,47 @@ function App() {
 
                   <label className="login-field">
                     <span>Slaptažodis</span>
-                    <input
-                      type="password"
-                      name="password"
-                      autoComplete="current-password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      required
-                    />
+                    <span className="password-input-wrap">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        required
+                      />
+                      <button
+                        className="password-visibility"
+                        type="button"
+                        onClick={() => setShowPassword((visible) => !visible)}
+                        aria-label={showPassword ? "Slėpti slaptažodį" : "Rodyti slaptažodį"}
+                        aria-pressed={showPassword}
+                      >
+                        {showPassword ? (
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8" />
+                            <path d="M9.9 5.2A10.8 10.8 0 0112 5c5.2 0 8.5 5.1 9 6-.3.6-1.5 2.6-3.8 4M6.2 6.2C3.9 7.6 2.4 10 2 11c.5.9 3.8 6 10 6 1 0 1.9-.2 2.7-.5" />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2 12s3.3-6 10-6 10 6 10 6-3.3 6-10 6-10-6-10-6Z" />
+                            <circle cx="12" cy="12" r="2.5" />
+                          </svg>
+                        )}
+                      </button>
+                    </span>
                   </label>
 
-                  <button type="submit" className="login-submit">
-                    Prisijungti
+                  <button type="submit" className="login-submit" disabled={tasksLoading}>
+                    {tasksLoading ? "Jungiamasi..." : "Prisijungti"}
                   </button>
 
-                  {loginError && (
-                    <p className="login-error" role="alert">
-                      {loginError}
-                    </p>
-                  )}
+                  {loginError && <p className="login-error" role="alert">{loginError}</p>}
                 </form>
               </div>
             )}
 
-            {isLoggedIn && (
+            {user && (
               <>
                 <section className="dashboard-summary" aria-label="Užduočių suvestinė">
                   <p>
@@ -179,7 +189,7 @@ function App() {
         </>
       )}
 
-      {activePage === "profile" && <Profile user={user} tasks={tasks} />}
+      {activePage === "profile" && user && <Profile user={user} tasks={tasks} />}
     </>
   );
 }
