@@ -4,14 +4,16 @@ import ProgressBar from "./ProgressBar";
 import Navbar from "./Navbar";
 import AddTaskForm from "./AddTaskForm";
 import Profile from "./Profile";
-import { authenticateUser, createTask, getTasks, updateTask } from "./taskApi";
+import { authenticateUser, createTask, getTasks, registerUser, updateTask } from "./taskApi";
 import "./App.css";
 
 function App() {
   const [activePage, setActivePage] = useState("home");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [user, setUser] = useState(null);
   const [loginError, setLoginError] = useState("");
   const [tasks, setTasks] = useState([]);
@@ -21,32 +23,54 @@ function App() {
   async function handleSubmit(event) {
     event.preventDefault();
     setLoginError("");
-    setTasksLoading(true);
 
+    if (isRegistering && password.length < 6) {
+      setLoginError("Slaptažodį turi sudaryti bent 6 simboliai.");
+      return;
+    }
+    if (isRegistering && password !== confirmPassword) {
+      setLoginError("Slaptažodžiai nesutampa.");
+      return;
+    }
+
+    setTasksLoading(true);
     try {
-      const authenticatedUser = await authenticateUser(email.trim(), password);
-      if (!authenticatedUser) {
-        setLoginError("Neteisingas vartotojo vardas arba slaptažodis.");
-        return;
+      let authenticatedUser;
+      if (isRegistering) {
+        authenticatedUser = await registerUser(email, password);
+      } else {
+        authenticatedUser = await authenticateUser(email.trim(), password);
+        if (!authenticatedUser) {
+          setLoginError("Neteisingas vartotojo vardas arba slaptažodis.");
+          return;
+        }
       }
 
-      const userTasks = await getTasks(authenticatedUser.name);
       setUser(authenticatedUser);
-      setTasks(userTasks);
       setTaskError("");
+      try {
+        setTasks(await getTasks(authenticatedUser.name));
+      } catch {
+        setTasks([]);
+        setTaskError("Paskyra sukurta, bet užduočių įkelti nepavyko. Patikrinkite TaskList lentelę.");
+      }
     } catch (error) {
-      setLoginError(error.message || "Nepavyko prisijungti. Patikrinkite duomenų bazės ryšį.");
+      setLoginError(error.message || "Nepavyko užbaigti veiksmo. Patikrinkite duomenų bazės ryšį.");
     } finally {
       setTasksLoading(false);
     }
   }
 
+  function toggleAuthMode() {
+    setIsRegistering((registering) => !registering);
+    setPassword("");
+    setConfirmPassword("");
+    setLoginError("");
+  }
+
   async function handleAddTask(newTask) {
     try {
-      const savedTask = await createTask({
-        ...newTask,
-        userName: user.name,
-      });
+      const savedTask = await createTask({ ...newTask, userName: user.name });
       setTasks((currentTasks) => [...currentTasks, savedTask]);
       setTaskError("");
     } catch {
@@ -101,8 +125,8 @@ function App() {
             {!user && (
               <div className="login-card">
                 <header className="login-card__header">
-                  <h1>Prisijungti</h1>
-                  <p>Įveskite savo duomenis, kad tęstumėte</p>
+                  <h1>{isRegistering ? "Nauja paskyra" : "Prisijungti"}</h1>
+                  <p>{isRegistering ? "Sukurkite Flowly paskyrą" : "Įveskite savo duomenis, kad tęstumėte"}</p>
                 </header>
 
                 <form className="login-form" onSubmit={handleSubmit}>
@@ -114,6 +138,7 @@ function App() {
                       autoComplete="username"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
+                      minLength={3}
                       required
                     />
                   </label>
@@ -124,9 +149,10 @@ function App() {
                       <input
                         type={showPassword ? "text" : "password"}
                         name="password"
-                        autoComplete="current-password"
+                        autoComplete={isRegistering ? "new-password" : "current-password"}
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
+                        minLength={isRegistering ? 6 : undefined}
                         required
                       />
                       <button
@@ -151,12 +177,33 @@ function App() {
                     </span>
                   </label>
 
+                  {isRegistering && (
+                    <label className="login-field">
+                      <span>Pakartokite slaptažodį</span>
+                      <input
+                        type="password"
+                        name="confirm-password"
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        minLength={6}
+                        required
+                      />
+                    </label>
+                  )}
+
                   <button type="submit" className="login-submit" disabled={tasksLoading}>
-                    {tasksLoading ? "Jungiamasi..." : "Prisijungti"}
+                    {tasksLoading
+                      ? "Prašome palaukti..."
+                      : isRegistering ? "Registruotis" : "Prisijungti"}
                   </button>
 
                   {loginError && <p className="login-error" role="alert">{loginError}</p>}
                 </form>
+
+                <button className="auth-mode-toggle" type="button" onClick={toggleAuthMode}>
+                  {isRegistering ? "Jau turite paskyrą? Prisijunkite" : "Neturite paskyros? Registruokitės"}
+                </button>
               </div>
             )}
 
@@ -173,14 +220,12 @@ function App() {
                 </section>
 
                 {taskError && <p className="login-error" role="alert">{taskError}</p>}
-
                 <TaskList
                   tasks={tasks}
                   loading={tasksLoading}
                   onStatusChange={(taskId, status) => handleTaskChange(taskId, { status })}
                   onDeadlineChange={(taskId, deadline) => handleTaskChange(taskId, { deadline })}
                 />
-
                 <AddTaskForm onAddTask={handleAddTask} />
                 <ProgressBar progress={progress} tasks={tasks} />
               </>

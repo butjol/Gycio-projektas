@@ -51,6 +51,28 @@ export async function authenticateUser(userName, password) {
   return user ? { name: user["User Name"] } : null;
 }
 
+export async function registerUser(userName, password) {
+  const users = recordsFrom(await request(USERS_URL));
+  const normalizedUserName = userName.trim().toLocaleLowerCase();
+  const alreadyExists = users.some((record) =>
+    String(record["User Name"] ?? "").trim().toLocaleLowerCase() === normalizedUserName,
+  );
+
+  if (alreadyExists) {
+    throw new Error("Šis vartotojo vardas jau užregistruotas.");
+  }
+
+  await request(USERS_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      "User Name": userName.trim(),
+      Password: password,
+    }),
+  });
+
+  return { name: userName.trim() };
+}
+
 export async function getTasks(userName) {
   const records = recordsFrom(await request(TASKS_URL));
   return records
