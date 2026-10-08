@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import TaskList from "./TaskList";
 import ProgressBar from "./ProgressBar";
 import Navbar from "./Navbar";
 import AddTaskForm from "./AddTaskForm";
 import Profile from "./Profile";
+import { createTask, getTasks, updateTask } from "./taskApi";
 import "./App.css";
 
 function App() {
@@ -17,21 +18,16 @@ function App() {
   const [password, setPassword] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [taskError, setTaskError] = useState("");
 
-  const [tasks, setTasks] = useState([
-    {
-      id: 1,
-      title: "Sukurti prisijungimo formą",
-      status: "Atlikta",
-      deadline: "2026-10-01",
-    },
-    {
-      id: 2,
-      title: "Sukurti užduočių sąrašą",
-      status: "Vykdoma",
-      deadline: "2026-10-05",
-    },
-  ]);
+  useEffect(() => {
+    getTasks()
+      .then(setTasks)
+      .catch(() => setTaskError("Nepavyko įkelti užduočių. Patikrinkite, ar API serveris veikia."))
+      .finally(() => setTasksLoading(false));
+  }, []);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -45,24 +41,29 @@ function App() {
     setLoginError("Neteisingas vartotojo vardas arba slaptažodis.");
   }
 
-  function handleAddTask(newTask) {
-    setTasks((currentTasks) => [...currentTasks, newTask]);
+  async function handleAddTask(newTask) {
+    try {
+      const savedTask = await createTask(newTask);
+      setTasks((currentTasks) => [...currentTasks, savedTask]);
+      setTaskError("");
+    } catch {
+      setTaskError("Užduoties išsaugoti nepavyko. Bandykite dar kartą.");
+    }
   }
 
-  function handleTaskStatusChange(taskId, status) {
-    setTasks((currentTasks) =>
-      currentTasks.map((task) =>
-        task.id === taskId ? { ...task, status } : task,
-      ),
-    );
-  }
+  async function handleTaskChange(taskId, changes) {
+    const currentTask = tasks.find((task) => task.id === taskId);
+    if (!currentTask) return;
 
-  function handleTaskDeadlineChange(taskId, deadline) {
-    setTasks((currentTasks) =>
-      currentTasks.map((task) =>
-        task.id === taskId ? { ...task, deadline } : task,
-      ),
-    );
+    try {
+      const updatedTask = await updateTask(currentTask, changes);
+      setTasks((currentTasks) =>
+        currentTasks.map((task) => task.id === taskId ? updatedTask : task),
+      );
+      setTaskError("");
+    } catch {
+      setTaskError("Užduoties pakeitimų išsaugoti nepavyko.");
+    }
   }
 
   const today = new Date();
@@ -104,50 +105,48 @@ function App() {
           <main className="login-page">
             {!isLoggedIn && (
               <div className="login-card">
-                <>
-                  <header className="login-card__header">
-                    <h1>Prisijungti</h1>
-                    <p>Įveskite savo duomenis, kad tęstumėte</p>
-                  </header>
+                <header className="login-card__header">
+                  <h1>Prisijungti</h1>
+                  <p>Įveskite savo duomenis, kad tęstumėte</p>
+                </header>
 
-                  <form className="login-form" onSubmit={handleSubmit}>
-                    <label className="login-field">
-                      <span>Vartotojo vardas</span>
-                      <input
-                        type="text"
-                        name="username"
-                        autoComplete="username"
-                        placeholder="admin"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        required
-                      />
-                    </label>
+                <form className="login-form" onSubmit={handleSubmit}>
+                  <label className="login-field">
+                    <span>Vartotojo vardas</span>
+                    <input
+                      type="text"
+                      name="username"
+                      autoComplete="username"
+                      placeholder="admin"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      required
+                    />
+                  </label>
 
-                    <label className="login-field">
-                      <span>Slaptažodis</span>
-                      <input
-                        type="password"
-                        name="password"
-                        autoComplete="current-password"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        required
-                      />
-                    </label>
+                  <label className="login-field">
+                    <span>Slaptažodis</span>
+                    <input
+                      type="password"
+                      name="password"
+                      autoComplete="current-password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      required
+                    />
+                  </label>
 
-                    <button type="submit" className="login-submit">
-                      Prisijungti
-                    </button>
+                  <button type="submit" className="login-submit">
+                    Prisijungti
+                  </button>
 
-                    {loginError && (
-                      <p className="login-error" role="alert">
-                        {loginError}
-                      </p>
-                    )}
-                  </form>
-                </>
+                  {loginError && (
+                    <p className="login-error" role="alert">
+                      {loginError}
+                    </p>
+                  )}
+                </form>
               </div>
             )}
 
@@ -163,15 +162,16 @@ function App() {
                   </p>
                 </section>
 
+                {taskError && <p className="login-error" role="alert">{taskError}</p>}
+
                 <TaskList
                   tasks={tasks}
-                  loading={false}
-                  onStatusChange={handleTaskStatusChange}
-                  onDeadlineChange={handleTaskDeadlineChange}
+                  loading={tasksLoading}
+                  onStatusChange={(taskId, status) => handleTaskChange(taskId, { status })}
+                  onDeadlineChange={(taskId, deadline) => handleTaskChange(taskId, { deadline })}
                 />
 
                 <AddTaskForm onAddTask={handleAddTask} />
-
                 <ProgressBar progress={progress} tasks={tasks} />
               </>
             )}
